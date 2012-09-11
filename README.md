@@ -4,13 +4,11 @@ A generic configuration files generator
 
 ## Motivation
 
-In your application there are many configurations (db host/port/username/password...), and you may save these configurations in some files.
+In your application there are many configurations (db host/port/username/password...), and you may save these in some configuration files.
 
 It's a bad practice to put the configuration files in your revision control.
 
-I want to seperate configuration from codebase(revision control), so I generate the configurations.
-
-When generating configurations, only configuration templates need to be checked into revision control.
+My solution is generating configurations. When generating configurations, only configuration file templates need to be checked into revision control.
 
 ## Example Usage
 
@@ -23,7 +21,7 @@ Make a `genconf` dir in root of your code repo like this(these files are all in 
 	  |-redis.conf -> configuration template for redis
 	  |-genconf.conf.lua -> configuration for genconf.lua
 
-And the content of genconf.conf.lua:
+And the content of `genconf.conf.lua`:
 
 	vars = {
 		'redis.host',
@@ -68,7 +66,7 @@ And you can also just run:
 
 It will ask you the value of variables. And then you can build your app.
 
-NOTE: lua and luajit both are OK, luajit is preferred. I use readline via [luajit-ffi](http://luajit.org/ext_ffi.html) when it's available. So with luajit you can do better line editing.
+NOTE: lua and luajit both are OK, luajit is preferred. I use [readline](http://www.gnu.org/software/readline/) via [luajit-ffi](http://luajit.org/ext_ffi.html) when it's available. So with luajit you can do better line editing.
 
 ## Cache
 
