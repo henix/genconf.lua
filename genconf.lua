@@ -9,7 +9,6 @@ do
 		os.pathsep = '\\' -- win
 	else
 		ftest:close()
-		ftest = nil
 		os.pathsep = '/' -- linux
 	end
 end
