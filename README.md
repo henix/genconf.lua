@@ -10,18 +10,27 @@ It's a bad practice to put the configuration files in your revision control.
 
 My solution is generating configurations. When generating configurations, only configuration file templates need to be checked into revision control.
 
-## Example Usage
+## Usage Example
 
-Suppose I write a application that uses redis as cache, and I need to configure it.
+### Prepare files
 
-Make a `genconf` dir in root of your code repo like this(these files are all in revision control):
+Suppose You have 2 configuration files:
+
+* src/main/resources/appname.json
+* redis.conf
+
+How could you switch to `genconf.lua`?
+
+1. Remove those files from revision control, and add them to `.gitignore`
+2. Create templates for `appname.json` and `redis.conf`
+3. Make a `genconf` dir in root of your code repo as following and check these files into revision control:
 
 	genconf
 	  |-appname.json -> configuration template for the app
 	  |-redis.conf -> configuration template for redis
 	  |-genconf.conf.lua -> configuration for genconf.lua
 
-And the content of `genconf.conf.lua`:
+The content of `genconf.conf.lua`:
 
 	vars = {
 		'redis.host',
@@ -33,11 +42,11 @@ And the content of `genconf.conf.lua`:
 		{ name = 'redis.conf', target = 'redis.conf' },
 	}
 
-It defines 2 variables, and target path of configuration templates.
+It defines variables, and target path of templates (i.e. where should genconf save the result).
 
 `name` is relative to genconf/ dir, and `target` path is relative to current dir. You MUST use '/' as path separator no matter what OS you are using.
 
-Let's see how to use variables in configuration template(`appname.json`):
+`appname.json`:
 
 	{
 		redis: {
@@ -46,7 +55,7 @@ Let's see how to use variables in configuration template(`appname.json`):
 		}
 	}
 
-and `redis.conf` looks like:
+`redis.conf`:
 
 	port ${redis.port}
 	bind 127.0.0.1
@@ -56,6 +65,8 @@ and `redis.conf` looks like:
 
 So, use the bash-like `${name}` notation to reference the variable.
 
+### Run genconf.lua
+
 The first time you checkout the code into a local dir, run genconf.lua to generate configurations:
 
 	lua genconf.lua redis.host=localhost redis.port=6379
@@ -64,29 +75,59 @@ And you can also just run:
 
 	luajit genconf.lua
 
-It will ask you the value of variables. And then you can build your app.
+If values are not specified in command line, genconf.lua will prompt user to input the value:
 
-NOTE: lua and luajit both are OK, luajit is preferred. I use [readline](http://www.gnu.org/software/readline/) via [luajit-ffi](http://luajit.org/ext_ffi.html) when it's available. So with luajit you can do better line editing.
+	$ luajit genconf.lua
+	redis.host=_
 
-## Cache
+The cursor will be after '=', then you input the value.
+
+After configuration files generated, you can build or run your app.
+
+NOTE: Both lua and luajit are OK, luajit is preferred. I use [readline](http://www.gnu.org/software/readline/) via [luajit-ffi](http://luajit.org/ext_ffi.html) when it's available. So with luajit you can do better line editing.
+
+### Cache
 
 Once you have specified or inputed the value of a variable, genconf.lua will cache it in a file named `.genconf.cache.lua`.
 
-Next time when you need to run genconf.lua, just run:
+Next time instead of typing them again, just run:
 
 	lua genconf.lua --use-cached
 
-And you need not type the values again. If there are new variables, you can still specify them in command line:
+genconf.lua will use the cached values. If there are new variables, you can still specify them in command line:
 
 	lua genconf.lua --use-cached "new.var=another test"
 
 NOTE: above example also showed how to deal with values that contains spaces.
 
+And the prompt will also change. For example, if you have used `localhost` as the values of `redis.host`:
+
+	$ luajit genconf.lua
+	redis.host=[localhost]_
+
+Then you type `Enter`, genconf.lua will automatically use `localhost` as the value of `redis.host`.
+
 How to clean the cache? Just remove `.genconf.cache.lua`.
+
+## Installation
+
+There are two choices:
+
+1. Add genconf.lua to your codebase
+2. Install genconf.lua (to for example /usr/bin) on every machine you use genconf.lua
+
+They both have advantages and disadvantages.
+
+1. Add genconf.lua to your codebase: if you want to upgrade it you must make a commit to all your codebases.
+2. Install it on machine: your code base depends on an external software.
+
+I recommend 1. for small projects and 2. for larger projects.
 
 ## Dependencies
 
-(Optional)
+* lua
+
+Optional:
 
 * luajit-ffi
 * readline
