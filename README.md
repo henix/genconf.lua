@@ -25,10 +25,10 @@ How could you switch to `genconf.lua`?
 2. Create templates for `appname.json` and `redis.conf`
 3. Make a `genconf` dir in root of your code repo as following and check these files into revision control:
 
-	genconf
-	  |-appname.json -> configuration template for the app
-	  |-redis.conf -> configuration template for redis
-	  |-genconf.conf.lua -> configuration for genconf.lua
+		genconf
+		  |-appname.json -> configuration template for the app
+		  |-redis.conf -> configuration template for redis
+		  |-genconf.conf.lua -> configuration for genconf.lua
 
 The content of `genconf.conf.lua`:
 
