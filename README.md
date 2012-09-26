@@ -37,8 +37,8 @@ The content of `genconf.conf.lua`:
 		'redis.port',
 	}
 	
-	files = {
-		{ name = appname.json', target = 'src/main/resources/appname.json' },
+	templates = {
+		{ name = 'appname.json', target = 'src/main/resources/appname.json' },
 		{ name = 'redis.conf', target = 'redis.conf' },
 	}
 
