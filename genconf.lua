@@ -2,6 +2,18 @@
 -- genconf.lua - a generic configuration files generator
 --]]
 
+function throw(msg)
+	assert(msg)
+	error(msg, 0)
+end
+
+function tassert(cond, msg, ...)
+	if not cond then
+		throw(msg)
+	end
+	return cond, msg, ...
+end
+
 -- figure out the path separator
 do
 	local ftest = io.open('/dev/null')
@@ -28,7 +40,7 @@ end
 dofile('genconf' .. os.pathsep .. 'genconf.conf.lua')
 
 -- cache
-cache = {
+local cache = {
 	['load'] = function()
 		local cached = nil
 		pcall(function()
@@ -72,26 +84,39 @@ if arg[1] == '--use-cached' then
 	useCached = true
 end
 
-local values = {}
-for _, varname in ipairs(vars) do
-	if useCached and cachedValues[varname] then
-		values[varname] = cachedValues[varname]
-	else
-		values[varname] = null
-	end
-end
+local VARNAME_PATT = '[%w._-]+'
 
---- try command line arguments
-for _, line in ipairs(arg) do
-	local i = string.find(line, '=', 1, true)
-	if i == nil then
-		error("Can't find '=' in :" .. line)
-	else
-		local name = string.sub(line, 1, i - 1)
-		local value = string.sub(line, i + 1)
-		assert(values[name] ~= nil, 'name is not in vars: ' .. name)
-		-- command line has a higher priority than cached values
-		values[name] = value
+local values = {}
+
+do
+	local ok, err = pcall(function()
+		for _, varname in ipairs(vars) do
+			tassert(string.match(varname, '^'..VARNAME_PATT..'$') ~= nil, 'Invalid var name: '..varname..' (must match '..VARNAME_PATT..')')
+			if useCached and cachedValues[varname] then
+				values[varname] = cachedValues[varname]
+			else
+				values[varname] = null
+			end
+		end
+
+		--- try command line arguments
+		for _, line in ipairs(arg) do
+			local i = string.find(line, '=', 1, true)
+			if i == nil then
+				throw("Can't find '=' in :" .. line)
+			else
+				local name = string.sub(line, 1, i - 1)
+				local value = string.sub(line, i + 1)
+				tassert(values[name] ~= nil, 'name is not in vars: ' .. name)
+				-- command line has a higher priority than cached values
+				values[name] = value
+			end
+		end
+	end)
+
+	if not ok then
+		io.write(err, '\n')
+		os.exit(1)
 	end
 end
 
@@ -140,7 +165,7 @@ for _, file in ipairs(templates) do
 	local all = ftmpl:read('*a')
 	io.close(ftmpl)
 
-	local result = string.gsub(all, '%${([%w.]+)}', function(name)
+	local result = string.gsub(all, '%${('..VARNAME_PATT..')}', function(name)
 		-- if not exists, leave it unchanged
 		return (values[name] or '${'..name..'}')
 	end)
