@@ -6,7 +6,7 @@ A generic configuration files generator
 
 In your application there are many configurations (db host/port/username/password...), and you may save these in some configuration files.
 
-It's a bad practice to put the configuration files in your revision control.
+It's a bad practice to check the configuration files into your revision control.
 
 My solution is generating configurations. When generating configurations, only configuration file templates need to be checked into revision control.
 
@@ -63,7 +63,7 @@ It defines variables, and target path of templates (i.e. where should genconf sa
 	timeout 0
 	......
 
-So, use the bash-like `${name}` notation to reference the variable.
+In templates, use the bash-like `${name}` notation to reference the variable.
 
 ### Run genconf.lua
 
@@ -136,9 +136,9 @@ Optional:
 
 * Auto-detect OS (Linux / Windows)
 
-## Limitations
+## Restrictions
 
-Variable name can only contains [A-Za-z0-9.]
+Variable name can only contains `[A-Za-z0-9._-]`
 
 ## Files
 
@@ -154,3 +154,7 @@ Generate what should be added to `.gitignore`:
 Use cached values:
 
 	lua genconf.lua --use-cached
+
+Get help:
+
+	lua genconf.lua --help

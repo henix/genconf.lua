@@ -1,7 +1,12 @@
 --[[
 -- genconf.lua - a generic configuration files generator
+--
+-- https://github.com/henix/genconf.lua
 --]]
 
+-- ## 0 Common functions
+
+-- ### 0.1 exception handling
 function throw(msg)
 	assert(msg)
 	error(msg, 0)
@@ -14,7 +19,7 @@ function tassert(cond, msg, ...)
 	return cond, msg, ...
 end
 
--- figure out the path separator
+-- ### 0.2 os path separator
 do
 	local ftest = io.open('/dev/null')
 	if ftest == nil then
@@ -37,9 +42,110 @@ else
 	end
 end
 
-dofile('genconf' .. os.pathsep .. 'genconf.conf.lua')
+-- ### 0.3 string
+function startsWith(str, prefix)
+	return (string.sub(str, 1, string.len(prefix)) == prefix)
+end
 
--- cache
+-- ### 0.4 table
+function table.indexOf(t, obj)
+	for i, v in ipairs(t) do
+		if v == obj then
+			return i
+		end
+	end
+	return nil
+end
+
+-- ## 1 Input process
+
+-- ### 1.1 parse command line
+local Action = { -- enum
+	PrintHelp = '--help',
+	PrintGitignore = '--gitignore',
+	UseCached = '--use-cached',
+}
+local action = nil
+local cmdValues = nil
+
+do
+	function parseArgs(args)
+		local action = nil
+		local cmdValues = {}
+		for _, param in ipairs(args) do
+			if param == '--help' then
+				if action ~= nil then throw('Option conflict: '..action..' and '..param) end
+				action = Action.PrintHelp
+			elseif param == '--gitignore' then
+				if action ~= nil then throw('Option conflict: '..action..' and '..param) end
+				action = Action.PrintGitignore
+			elseif param == '--use-cached' then
+				if action ~= nil then throw('Option conflict: '..action..' and '..param) end
+				action = Action.UseCached
+			elseif startsWith(param, '--') then
+				throw('Unknown option: '..param)
+			else
+				local i = string.find(line, '=', 1, true)
+				tassert(i ~= nil, "Can't find '=' in : "..param)
+				local name = string.sub(line, 1, i - 1)
+				local value = string.sub(line, i + 1)
+				tassert(cmdValues[name] == nil, 'Duplicated name in cmdline: ' .. name)
+				cmdValues[name] = value
+			end
+		end
+		return action, cmdValues
+	end
+
+	local action_err, ok
+
+	ok, action_err, cmdValues = pcall(parseArgs, arg)
+	if not ok then
+		io.write(action_err, '\n')
+		os.exit(1)
+	end
+
+	action = action_err
+end
+
+-- ### 1.2 print help
+if action == Action.PrintHelp then
+	print('Usage: lua genconf.lua [--gitignore | --help | --use-cached] name1=value1 name2=value2 ...')
+	os.exit(0)
+end
+
+-- ### 1.3 import genconf.conf.lua and validate
+local VARNAME_PATT = '[%w._-]+'
+
+do
+local ok, err = pcall(function()
+	dofile('genconf'..os.pathsep..'genconf.conf.lua')
+	tassert(vars, 'genconf.conf.lua: vars not defined')
+	tassert(templates, 'genconf.conf.lua: templates not defined')
+	for _, varname in ipairs(vars) do
+		tassert(string.match(varname, '^'..VARNAME_PATT..'$') ~= nil, 'Invalid var name: '..varname..' (must match '..VARNAME_PATT..')')
+	end
+	for k, v in pairs(cmdValues) do
+		tassert(table.indexOf(vars, k), 'name is not in vars: '..k)
+	end
+end)
+	if not ok then
+		io.write(err, '\n')
+		os.exit(2)
+	end
+end
+
+-- ### 1.4 print .gitignore
+if action == Action.PrintGitignore then
+	print('.genconf.cache.lua')
+	for _, temp in ipairs(templates) do
+		io.write(temp.target, '\n')
+	end
+	os.exit(0)
+end
+
+-- ### 1.5 use cache
+local useCached = (action == Action.UseCached)
+
 local cache = {
 	['load'] = function()
 		local cached = nil
@@ -62,65 +168,21 @@ local cache = {
 	end
 }
 
--- process command line
-if arg[1] == '--gitignore' then
-	print('.genconf.cache.lua')
-	for _, temp in ipairs(templates) do
-		io.write(temp.target, '\n')
-	end
-	return
-end
-
 local cachedValues = cache.load()
 
-local null = {}
-
--- get the value of variables
-
---- --use-cached
-local useCached = false
-if arg[1] == '--use-cached' then
-	table.remove(arg, 1)
-	useCached = true
-end
-
-local VARNAME_PATT = '[%w._-]+'
-
+-- ### 1.6 apply cachedValues and cmdValues to values
 local values = {}
 
-do
-	local ok, err = pcall(function()
-		for _, varname in ipairs(vars) do
-			tassert(string.match(varname, '^'..VARNAME_PATT..'$') ~= nil, 'Invalid var name: '..varname..' (must match '..VARNAME_PATT..')')
-			if useCached and cachedValues[varname] then
-				values[varname] = cachedValues[varname]
-			else
-				values[varname] = null
-			end
-		end
-
-		--- try command line arguments
-		for _, line in ipairs(arg) do
-			local i = string.find(line, '=', 1, true)
-			if i == nil then
-				throw("Can't find '=' in :" .. line)
-			else
-				local name = string.sub(line, 1, i - 1)
-				local value = string.sub(line, i + 1)
-				tassert(values[name] ~= nil, 'name is not in vars: ' .. name)
-				-- command line has a higher priority than cached values
-				values[name] = value
-			end
-		end
-	end)
-
-	if not ok then
-		io.write(err, '\n')
-		os.exit(1)
+for _, varname in ipairs(vars) do
+	if useCached and cachedValues[varname] then
+		values[varname] = cachedValues[varname]
+	end
+	if cmdValues[varname] then
+		values[varname] = cmdValues[varname]
 	end
 end
 
--- ask user
+-- ### 1.7 ask user
 --- load readline library via ffi if available
 local readline = nil
 do
@@ -141,8 +203,9 @@ do
 		end
 	end
 end
+
 for _, name in ipairs(vars) do
-	if values[name] == null then
+	if values[name] == nil then
 		if cachedValues[name] then
 			local line = readline(name..'=['..cachedValues[name]..']')
 			if #line == 0 then
@@ -156,10 +219,10 @@ for _, name in ipairs(vars) do
 	end
 end
 
--- save cache
+-- ## 2. save cache
 cache.save(values)
 
--- generate
+-- ## 3. generate
 for _, file in ipairs(templates) do
 	local ftmpl = assert(io.open('genconf' .. os.pathsep .. normalizePath(file.name)))
 	local all = ftmpl:read('*a')
