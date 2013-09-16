@@ -7,9 +7,6 @@ PLEASE NOTE:
 - main reason for existance of this fork is to allow me to add some flexibility for generation of similar configuration files to different paths
 - documentation of this fork is **not** (yet) up-to-date
 
-* auto-gen TOC:
-{:toc}
-
 ## Motivation
 
 In your application there are many configurations (db host/port/username/password...), and you may save these in some configuration files.
