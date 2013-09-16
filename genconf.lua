@@ -1,7 +1,17 @@
 --[[
 -- genconf.lua - a generic configuration files generator
 --
--- https://github.com/henix/genconf.lua
+-- original project:  https://github.com/henix/genconf.lua
+-- forked to:         https://github.com/brammert010/genconf.lua
+-- 
+-- following modifications/additions were made in this fork:
+--
+-- * added support for configurable template path (--tplpath)
+-- * added support for configurable config file (--config)
+-- * added support for auto-creation of target paths based on added 'paths' section to config file
+-- * added support for use of vars in target paths and target files
+-- * disabled stop-criteria in case given var on the command-line is not known in configuration for flexibility
+--
 --]]
 
 -- ## 0 Common functions
@@ -42,6 +52,12 @@ else
 	end
 end
 
+function createDir (dirname)
+	print("create directory " .. dirname)
+	os.execute("mkdir " .. dirname)
+end
+
+
 -- ### 0.3 string
 function startsWith(str, prefix)
 	return (string.sub(str, 1, string.len(prefix)) == prefix)
@@ -68,6 +84,9 @@ local Action = { -- enum
 local action = nil
 local cmdValues = nil
 
+local tplpath = nil
+local config = nil
+
 do
 	function parseArgs(args)
 		local action = nil
@@ -82,13 +101,21 @@ do
 			elseif param == '--use-cached' then
 				if action ~= nil then throw('Option conflict: '..action..' and '..param) end
 				action = Action.UseCached
+			elseif startsWith(param, '--config') then
+				local i = string.find(param, '=', 1, true)
+				tassert(i ~= nil, "Can't find '=' in : "..param)
+				config = string.sub(param, i + 1)
+			elseif startsWith(param, '--tplpath') then
+				local i = string.find(param, '=', 1, true)
+				tassert(i ~= nil, "Can't find '=' in : "..param)
+				tplpath = string.sub(param, i + 1)
 			elseif startsWith(param, '--') then
 				throw('Unknown option: '..param)
 			else
-				local i = string.find(line, '=', 1, true)
+				local i = string.find(param, '=', 1, true)
 				tassert(i ~= nil, "Can't find '=' in : "..param)
-				local name = string.sub(line, 1, i - 1)
-				local value = string.sub(line, i + 1)
+				local name = string.sub(param, 1, i - 1)
+				local value = string.sub(param, i + 1)
 				tassert(cmdValues[name] == nil, 'Duplicated name in cmdline: ' .. name)
 				cmdValues[name] = value
 			end
@@ -107,9 +134,17 @@ do
 	action = action_err
 end
 
+if tplpath == nil then
+	tplpath = 'genconf'
+end
+
+if config == nil then
+	config = tplpath..os.pathsep..'genconf.conf.lua'
+end
+
 -- ### 1.2 print help
 if action == Action.PrintHelp then
-	print('Usage: lua genconf.lua [--gitignore | --help | --use-cached] name1=value1 name2=value2 ...')
+	print('Usage: lua genconf.lua [--gitignore | --help | --use-cached] [--tplpath=genconf] [--config=${tplpath}/genconf.conf.lua] name1=value1 name2=value2 ...')
 	os.exit(0)
 end
 
@@ -118,15 +153,15 @@ local VARNAME_PATT = '[%w._-]+'
 
 do
 local ok, err = pcall(function()
-	dofile('genconf'..os.pathsep..'genconf.conf.lua')
+	dofile(config)
 	tassert(vars, 'genconf.conf.lua: vars not defined')
 	tassert(templates, 'genconf.conf.lua: templates not defined')
 	for _, varname in ipairs(vars) do
 		tassert(string.match(varname, '^'..VARNAME_PATT..'$') ~= nil, 'Invalid var name: '..varname..' (must match '..VARNAME_PATT..')')
 	end
-	for k, v in pairs(cmdValues) do
-		tassert(table.indexOf(vars, k), 'name is not in vars: '..k)
-	end
+--	for k, v in pairs(cmdValues) do
+--		tassert(table.indexOf(vars, k), 'name is not in vars: '..k)
+--	end
 end)
 	if not ok then
 		io.write(err, '\n')
@@ -223,8 +258,16 @@ end
 cache.save(values)
 
 -- ## 3. generate
+for _, path in ipairs(paths) do
+	local realpath = string.gsub(path, '%${('..VARNAME_PATT..')}', function(name)
+		-- if not exists, leave it unchanged
+		return (values[name] or '${'..name..'}')
+	end)
+	createDir(normalizePath(realpath))
+end
+
 for _, file in ipairs(templates) do
-	local ftmpl = assert(io.open('genconf' .. os.pathsep .. normalizePath(file.name)))
+	local ftmpl = assert(io.open(tplpath.. os.pathsep .. normalizePath(file.name)))
 	local all = ftmpl:read('*a')
 	io.close(ftmpl)
 
@@ -234,8 +277,13 @@ for _, file in ipairs(templates) do
 	end)
 
 	local outname = normalizePath(file.target)
-	io.write('generating ', outname)
-	local fout = assert(io.open(outname, 'w'))
+	local realoutname = string.gsub(outname, '%${('..VARNAME_PATT..')}', function(name)
+		-- if not exists, leave it unchanged
+		return (values[name] or '${'..name..'}')
+	end)
+
+	io.write('generating ', realoutname)
+	local fout = assert(io.open(realoutname, 'w'))
 	fout:write(result)
 	io.close(fout)
 	io.write(' ... done.\n')
